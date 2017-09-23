@@ -2,26 +2,83 @@ package main
 
 import (
 	"log"
+	"os"
 	"time"
 
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/urfave/cli"
 	r "gopkg.in/gorethink/gorethink.v3"
 )
 
 func main() {
-	route()
+
+	app := cli.NewApp()
+
+	app.Name = "Aevo Vault"
+	app.Usage = "Aevo data storage API."
+
+	app.Version = "1.0-dev"
+	app.Copyright = "(c) 2017 Harrison Grodin"
+	app.Authors = []cli.Author{
+		cli.Author{
+			Name:  "Harrison Grodin",
+			Email: "grodinh@winchesterthurston.org",
+		},
+	}
+
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "ip",
+			Value: ":3000",
+			Usage: "server IP address",
+		},
+		cli.StringFlag{
+			Name:  "database-ip",
+			Value: "localhost:28015",
+			Usage: "database IP address",
+		},
+		cli.StringFlag{
+			Name:  "db-data",
+			Value: "data",
+			Usage: "database for storing data",
+		},
+		cli.StringFlag{
+			Name:  "db-model",
+			Value: "model",
+			Usage: "database for storing contexts and models",
+		},
+		cli.StringFlag{
+			Name:        "data-primary-key",
+			Value:       "time",
+			Usage:       "primary data storage key",
+			Destination: &primaryKey,
+		},
+	}
+
+	app.Action = func(c *cli.Context) error {
+		route(
+			c.String("ip"),
+			c.String("database-ip"),
+			c.String("db-data"),
+			c.String("db-model"),
+		)
+		return nil
+	}
+
+	app.Run(os.Args)
+
 }
 
-func route() {
+func route(IP string, databaseIP string, dbData, dbModel string) {
 
 	router := gin.Default()
 	context := router.Group("/context")
 
 	dataSession, err := r.Connect(r.ConnectOpts{
-		Address:  "localhost:28015",
-		Database: "test",
+		Address:  databaseIP,
+		Database: dbData,
 	})
 	if err != nil {
 		log.Fatalln(err)
@@ -29,8 +86,8 @@ func route() {
 	routeState(context, dataSession)
 
 	modelSession, err := r.Connect(r.ConnectOpts{
-		Address:  "localhost:28015",
-		Database: "model",
+		Address:  databaseIP,
+		Database: dbModel,
 	})
 	if err != nil {
 		log.Fatalln(err)
@@ -38,11 +95,11 @@ func route() {
 	routeContext(context, dataSession, modelSession)
 	routeModel(context, modelSession)
 
-	router.Run(":3000")
+	router.Run(IP)
 
 }
 
-const primaryKey = "time"
+var primaryKey = "time"
 
 ////////
 
