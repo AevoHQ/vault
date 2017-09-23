@@ -51,7 +51,7 @@ func main() {
 		cli.StringFlag{
 			Name:        "db-model",
 			Value:       "model",
-			Usage:       "database for storing contexts and models",
+			Usage:       "database for storing schemas and models",
 			Destination: &dbModel,
 			EnvVar:      "AEVO_DB_MODEL",
 		},
@@ -106,8 +106,8 @@ func main() {
 
 				session.Use(dbModel)
 
-				if _, err := r.TableCreate("context").RunWrite(session); err != nil {
-					log.Fatalln("Unable to create context table: ", err)
+				if _, err := r.TableCreate("schema").RunWrite(session); err != nil {
+					log.Fatalln("Unable to create schema table: ", err)
 					return nil
 				}
 
@@ -131,7 +131,7 @@ var dbModel, dbData = "model", "data"
 func route(IP string, databaseIP string) {
 
 	router := gin.Default()
-	context := router.Group("/context")
+	scope := router.Group("/scope")
 
 	dataSession, err := r.Connect(r.ConnectOpts{
 		Address:  databaseIP,
@@ -140,7 +140,7 @@ func route(IP string, databaseIP string) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	routeState(context, dataSession)
+	routeState(scope, dataSession)
 
 	modelSession, err := r.Connect(r.ConnectOpts{
 		Address:  databaseIP,
@@ -149,8 +149,8 @@ func route(IP string, databaseIP string) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	routeContext(context, dataSession, modelSession)
-	routeModel(context, modelSession)
+	routeSchema(scope, dataSession, modelSession)
+	routeModel(scope, modelSession)
 
 	router.Run(IP)
 
@@ -188,12 +188,12 @@ func (states states) parseMapTime() {
 }
 
 func routeState(router gin.IRouter, session *r.Session) {
-	router.GET("/:context", func(c *gin.Context) {
-		res, err := r.Table(c.Param("context")).OrderBy(r.OrderByOpts{
+	router.GET("/:scope", func(c *gin.Context) {
+		res, err := r.Table(c.Param("scope")).OrderBy(r.OrderByOpts{
 			Index: primaryKey,
 		}).Run(session)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "context not registered"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "scope not registered"})
 			return
 		}
 		defer res.Close()
@@ -207,7 +207,7 @@ func routeState(router gin.IRouter, session *r.Session) {
 		c.JSON(http.StatusOK, data)
 	})
 
-	router.POST("/:context", func(c *gin.Context) {
+	router.POST("/:scope", func(c *gin.Context) {
 		storeState := func(data dataInput) {
 			if c.BindJSON(&data) != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON data"})
@@ -216,9 +216,9 @@ func routeState(router gin.IRouter, session *r.Session) {
 
 			data.parseMapTime()
 
-			_, err := r.Table(c.Param("context")).Insert(data, r.InsertOpts{Conflict: "replace"}).RunWrite(session)
+			_, err := r.Table(c.Param("scope")).Insert(data, r.InsertOpts{Conflict: "replace"}).RunWrite(session)
 			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "context not registered"})
+				c.JSON(http.StatusNotFound, gin.H{"error": "scope not registered"})
 				return
 			}
 
@@ -238,9 +238,9 @@ func routeState(router gin.IRouter, session *r.Session) {
 
 ////////
 
-func routeContext(router gin.IRouter, dataSession *r.Session, session *r.Session) {
-	router.GET("/:context/context", func(c *gin.Context) {
-		res, err := r.Table("context").Get(c.Param("context")).Run(session)
+func routeSchema(router gin.IRouter, dataSession *r.Session, session *r.Session) {
+	router.GET("/:scope/schema", func(c *gin.Context) {
+		res, err := r.Table("schema").Get(c.Param("scope")).Run(session)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error scanning database"})
 			return
@@ -256,16 +256,16 @@ func routeContext(router gin.IRouter, dataSession *r.Session, session *r.Session
 		c.JSON(http.StatusOK, result)
 	})
 
-	router.POST("/:context/context", func(c *gin.Context) {
-		var context map[string]interface{}
+	router.POST("/:scope/schema", func(c *gin.Context) {
+		var schema map[string]interface{}
 
-		if c.BindJSON(&context) != nil {
+		if c.BindJSON(&schema) != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON data"})
 			return
 		}
 
 		invalids := []string{}
-		for k, v := range context {
+		for k, v := range schema {
 
 			if v == "id" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid field: 'id'"})
@@ -293,18 +293,18 @@ func routeContext(router gin.IRouter, dataSession *r.Session, session *r.Session
 			return
 		}
 
-		context["id"] = c.Param("context")
+		schema["id"] = c.Param("scope")
 
-		if _, err := r.Table("context").Insert(context).RunWrite(session); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "duplicate context"})
+		if _, err := r.Table("schema").Insert(schema).RunWrite(session); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "duplicate scope"})
 			return
 		}
 
-		if _, err := r.TableCreate(context["id"], r.TableCreateOpts{PrimaryKey: "time"}).RunWrite(dataSession); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "duplicate context"})
+		if _, err := r.TableCreate(schema["id"], r.TableCreateOpts{PrimaryKey: "time"}).RunWrite(dataSession); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "duplicate scope"})
 		}
 
-		c.JSON(http.StatusOK, context)
+		c.JSON(http.StatusOK, schema)
 	})
 }
 
@@ -317,8 +317,8 @@ type model struct {
 
 func routeModel(router gin.IRouter, session *r.Session) {
 
-	router.GET("/:context/model", func(c *gin.Context) {
-		res, err := r.Table("model").Get(c.Param("context")).Run(session)
+	router.GET("/:scope/model", func(c *gin.Context) {
+		res, err := r.Table("model").Get(c.Param("scope")).Run(session)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error scanning database"})
 			return
@@ -334,14 +334,14 @@ func routeModel(router gin.IRouter, session *r.Session) {
 		c.JSON(http.StatusOK, result)
 	})
 
-	router.POST("/:context/model", func(c *gin.Context) {
+	router.POST("/:scope/model", func(c *gin.Context) {
 		var factors []string
 		if c.BindJSON(&factors) != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON data"})
 			return
 		}
 
-		newModel := model{Factors: factors, ID: c.Param("context")}
+		newModel := model{Factors: factors, ID: c.Param("scope")}
 
 		if _, err := r.Table("model").Insert(newModel, r.InsertOpts{Conflict: "replace"}).RunWrite(session); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
