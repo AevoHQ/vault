@@ -30,30 +30,37 @@ func main() {
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:  "ip",
-			Value: ":3000",
-			Usage: "server IP address",
+			Name:   "ip",
+			Value:  ":3000",
+			Usage:  "server IP address",
+			EnvVar: "AEVO_IP",
 		},
 		cli.StringFlag{
-			Name:  "database-ip",
-			Value: "localhost:28015",
-			Usage: "database IP address",
+			Name:   "database-ip",
+			Value:  "localhost:28015",
+			Usage:  "database IP address",
+			EnvVar: "AEVO_DATABASE_IP",
 		},
 		cli.StringFlag{
-			Name:  "db-data",
-			Value: "data",
-			Usage: "database for storing data",
+			Name:        "db-data",
+			Value:       "data",
+			Usage:       "database for storing data",
+			Destination: &dbData,
+			EnvVar:      "AEVO_DB_DATA",
 		},
 		cli.StringFlag{
-			Name:  "db-model",
-			Value: "model",
-			Usage: "database for storing contexts and models",
+			Name:        "db-model",
+			Value:       "model",
+			Usage:       "database for storing contexts and models",
+			Destination: &dbModel,
+			EnvVar:      "AEVO_DB_MODEL",
 		},
 		cli.StringFlag{
 			Name:        "data-primary-key",
 			Value:       "time",
 			Usage:       "primary data storage key",
 			Destination: &primaryKey,
+			EnvVar:      "AEVO_DATA_PRIMARY_KEY",
 		},
 	}
 
@@ -61,17 +68,67 @@ func main() {
 		route(
 			c.String("ip"),
 			c.String("database-ip"),
-			c.String("db-data"),
-			c.String("db-model"),
 		)
 		return nil
+	}
+
+	app.Commands = []cli.Command{
+		{
+			Name:    "generate",
+			Aliases: []string{"gen", "g"},
+			Usage:   "generate databases",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "database-ip",
+					Value: "localhost:28015",
+					Usage: "database IP address",
+				},
+			},
+			Action: func(c *cli.Context) error {
+
+				session, err := r.Connect(r.ConnectOpts{
+					Address: c.String("database-ip"),
+				})
+				if err != nil {
+					log.Fatalln(err)
+					return nil
+				}
+
+				if _, err := r.DBCreate(dbModel).RunWrite(session); err != nil {
+					log.Fatalln("Unable to create model database: ", err)
+					return nil
+				}
+
+				if _, err := r.DBCreate(dbData).RunWrite(session); err != nil {
+					log.Fatalln("Unable to create data database: ", err)
+					return nil
+				}
+
+				session.Use(dbModel)
+
+				if _, err := r.TableCreate("context").RunWrite(session); err != nil {
+					log.Fatalln("Unable to create context table: ", err)
+					return nil
+				}
+
+				if _, err := r.TableCreate("model").RunWrite(session); err != nil {
+					log.Fatalln("Unable to create model table: ", err)
+					return nil
+				}
+
+				return nil
+			},
+		},
 	}
 
 	app.Run(os.Args)
 
 }
 
-func route(IP string, databaseIP string, dbData, dbModel string) {
+var primaryKey = "time"
+var dbModel, dbData = "model", "data"
+
+func route(IP string, databaseIP string) {
 
 	router := gin.Default()
 	context := router.Group("/context")
@@ -98,8 +155,6 @@ func route(IP string, databaseIP string, dbData, dbModel string) {
 	router.Run(IP)
 
 }
-
-var primaryKey = "time"
 
 ////////
 
