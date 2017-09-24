@@ -1,16 +1,15 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
-	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	r "gopkg.in/gorethink/gorethink.v3"
 )
 
-func getTruncated(scope string, time time.Time, session *r.Session) (state, error) {
+// GetRecent retrieves the most recent scope entry before a specific time.
+func GetRecent(scope string, time time.Time, session *r.Session) (State, error) {
 	res, err := r.Table(scope).
 		Filter(r.Row.Field(primaryKey).Lt(time)).
 		Max(primaryKey).Run(session)
@@ -19,7 +18,7 @@ func getTruncated(scope string, time time.Time, session *r.Session) (state, erro
 	}
 	defer res.Close()
 
-	var data state
+	var data State
 	if err := res.One(&data); err != nil {
 		return nil, err
 	}
@@ -27,79 +26,46 @@ func getTruncated(scope string, time time.Time, session *r.Session) (state, erro
 	return data, nil
 }
 
+// DataPoint is a single data point, containing a primary label and values for its model factors.
+type DataPoint struct {
+	Label   State            `json:"label"`
+	Factors map[string]State `json:"factors"`
+}
+
 func routeData(router gin.IRouter, dataSession *r.Session, modelSession *r.Session) {
 
 	router.GET("/:scope/data", func(c *gin.Context) {
 		scope := c.Param("scope")
 
-		model, err := getModel(scope, modelSession)
+		model, err := GetModel(scope, modelSession)
 		if err != nil {
 			return
 		}
 
-		states, err := getStates(scope, dataSession, c)
+		states, err := GetStates(scope, dataSession)
 		if err != nil {
 			return
 		}
 
-		result := make([][]float64, len(states))
+		dataSet := make([]DataPoint, len(states))
+		for index, state := range states {
+			dataSet[index] = DataPoint{Label: state, Factors: make(map[string]State)}
+		}
 
-		for stateIndex, state := range states {
-			resultVectors := make(map[string][]float64)
-
+		for _, dataPoint := range dataSet {
 			for _, factorScope := range model.Factors {
-
-				factorSchema, _ := getSchema(factorScope, modelSession)
-				value, err := getTruncated(factorScope, state[primaryKey].(time.Time), dataSession)
+				factorState, err := GetRecent(factorScope, dataPoint.Label[primaryKey].(time.Time), dataSession)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "error retrieving truncated factor data"})
 					return
 				}
-
-				for fieldName, fieldType := range factorSchema {
-
-					if fieldName == "id" {
-						continue
-					}
-
-					if fieldType == "number" {
-						resultVectors[fieldName] = []float64{value[fieldName].(float64)}
-						continue
-					}
-
-					if xs, ok := fieldType.([]interface{}); ok {
-						vector := make([]float64, len(xs))
-						for i, x := range xs {
-							if value[fieldName] == x {
-								vector[i] = 1
-								break
-							}
-						}
-						fmt.Println(fieldName, vector)
-						resultVectors[fieldName] = vector
-						continue
-					}
-				}
-
+				delete(factorState, primaryKey)
+				dataPoint.Factors[factorScope] = factorState
 			}
-
-			sortedKeys := make([]string, len(resultVectors))
-			i := 0
-			for k := range resultVectors {
-				sortedKeys[i] = k
-				i++
-			}
-			sort.Strings(sortedKeys)
-
-			var things []float64
-			for _, key := range sortedKeys {
-				things = append(things, resultVectors[key]...)
-			}
-			fmt.Println(things)
-			result[stateIndex] = things
+			delete(dataPoint.Label, primaryKey)
 		}
 
-		c.JSON(http.StatusOK, result)
+		c.JSON(http.StatusOK, dataSet)
 
 	})
 
