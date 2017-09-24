@@ -12,23 +12,31 @@ type model struct {
 	ID      string   `json:"id" gorethink:"id"`
 }
 
+func getModel(scope string, session *r.Session) (model, error) {
+	res, err := r.Table("model").Get(scope).Run(session)
+	if err != nil {
+		return model{}, err
+	}
+	defer res.Close()
+
+	var result model
+	if err := res.One(&result); err != nil {
+		return model{}, err
+	}
+
+	return result, nil
+}
+
 func routeModel(router gin.IRouter, session *r.Session) {
 
 	router.GET("/:scope/model", func(c *gin.Context) {
-		res, err := r.Table("model").Get(c.Param("scope")).Run(session)
+		model, err := getModel(c.Param("scope"), session)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error scanning database"})
-			return
-		}
-		defer res.Close()
-
-		var result model
-		if err := res.One(&result); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "model not found"})
 			return
 		}
 
-		c.JSON(http.StatusOK, result)
+		c.JSON(http.StatusOK, model)
 	})
 
 	router.POST("/:scope/model", func(c *gin.Context) {

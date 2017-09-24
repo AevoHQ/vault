@@ -39,23 +39,31 @@ func (states states) parseMapTime() {
 	}
 }
 
+func getStates(scope string, session *r.Session, c *gin.Context) ([]state, error) {
+	res, err := r.Table(c.Param("scope")).OrderBy(r.OrderByOpts{
+		Index: primaryKey,
+	}).Run(session)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "scope not registered"})
+		return nil, err
+	}
+	defer res.Close()
+
+	var data []state
+	if err := res.All(&data); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error scanning database result"})
+		return nil, err
+	}
+
+	return data, nil
+}
+
 func routeState(router gin.IRouter, session *r.Session) {
 	router.GET("/:scope", func(c *gin.Context) {
-		res, err := r.Table(c.Param("scope")).OrderBy(r.OrderByOpts{
-			Index: primaryKey,
-		}).Run(session)
+		data, err := getStates(c.Param("scope"), session, c)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "scope not registered"})
 			return
 		}
-		defer res.Close()
-
-		var data []interface{}
-		if err := res.All(&data); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error scanning database result"})
-			return
-		}
-
 		c.JSON(http.StatusOK, data)
 	})
 
