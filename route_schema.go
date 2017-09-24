@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -89,14 +88,17 @@ func routeSchema(router gin.IRouter, dataSession *r.Session, session *r.Session)
 
 		schema["id"] = c.Param("scope")
 
-		if _, err := r.Table("schema").Insert(schema).RunWrite(session); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "duplicate schema"})
-			fmt.Println(err)
+		res, err := r.Table("schema").Insert(schema, r.InsertOpts{Conflict: "replace"}).RunWrite(session)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "storage error"})
 			return
 		}
 
-		if _, err := r.TableCreate(schema["id"], r.TableCreateOpts{PrimaryKey: "time"}).RunWrite(dataSession); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "duplicate schema"})
+		if res.Inserted != 0 {
+			if _, err := r.TableCreate(schema["id"], r.TableCreateOpts{PrimaryKey: "time"}).RunWrite(dataSession); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "duplicate schema"})
+				return
+			}
 		}
 
 		c.JSON(http.StatusOK, schema)
