@@ -10,14 +10,18 @@ import (
 
 var primaryKey = "time"
 
-type state map[string]interface{}
-type states []state
+// State is a single state of a scope.
+type State map[string]interface{}
 
-type dataInput interface {
+// States is a list of `State`s.
+type States []State
+
+// Statelike is an interface for types that may be interpreted and stored as states.
+type Statelike interface {
 	parseMapTime()
 }
 
-func (state state) parseMapTime() {
+func (state State) parseMapTime() {
 	if val, ok := state[primaryKey].(string); ok {
 
 		t, err := time.Parse(time.RFC3339, val)
@@ -33,25 +37,24 @@ func (state state) parseMapTime() {
 	}
 }
 
-func (states states) parseMapTime() {
+func (states States) parseMapTime() {
 	for _, state := range states {
 		state.parseMapTime()
 	}
 }
 
-func getStates(scope string, session *r.Session, c *gin.Context) ([]state, error) {
-	res, err := r.Table(c.Param("scope")).OrderBy(r.OrderByOpts{
+// GetStates retrieves all stored states for a given scope in chronological order.
+func GetStates(scope string, session *r.Session) (States, error) {
+	res, err := r.Table(scope).OrderBy(r.OrderByOpts{
 		Index: primaryKey,
 	}).Run(session)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "scope not registered"})
 		return nil, err
 	}
 	defer res.Close()
 
-	var data []state
+	var data States
 	if err := res.All(&data); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "error scanning database result"})
 		return nil, err
 	}
 
@@ -60,15 +63,16 @@ func getStates(scope string, session *r.Session, c *gin.Context) ([]state, error
 
 func routeState(router gin.IRouter, session *r.Session) {
 	router.GET("/:scope", func(c *gin.Context) {
-		data, err := getStates(c.Param("scope"), session, c)
+		data, err := GetStates(c.Param("scope"), session)
 		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "error retrieving states"})
 			return
 		}
 		c.JSON(http.StatusOK, data)
 	})
 
 	router.POST("/:scope", func(c *gin.Context) {
-		storeState := func(data dataInput) {
+		storeState := func(data Statelike) {
 			if c.BindJSON(&data) != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON data"})
 				return
@@ -87,10 +91,10 @@ func routeState(router gin.IRouter, session *r.Session) {
 
 		multi := c.DefaultQuery("multi", "false")
 		if multi != "true" {
-			var data state
+			var data State
 			storeState(&data)
 		} else {
-			var data states
+			var data States
 			storeState(&data)
 		}
 	})

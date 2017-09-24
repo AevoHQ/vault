@@ -8,16 +8,18 @@ import (
 	r "gopkg.in/gorethink/gorethink.v3"
 )
 
-type schema map[string]interface{}
+// Schema is a schema for scopes, defining what type each field should be.
+type Schema map[string]interface{}
 
-func getSchema(scope string, session *r.Session) (schema, error) {
+// GetSchema retrieves the schema for a given scope.
+func GetSchema(scope string, session *r.Session) (Schema, error) {
 	res, err := r.Table("schema").Get(scope).Run(session)
 	if err != nil {
 		return nil, err
 	}
 	defer res.Close()
 
-	var result schema
+	var result Schema
 	if err := res.One(&result); err != nil {
 		return nil, err
 	}
@@ -27,7 +29,7 @@ func getSchema(scope string, session *r.Session) (schema, error) {
 
 func routeSchema(router gin.IRouter, dataSession *r.Session, session *r.Session) {
 	router.GET("/:scope/schema", func(c *gin.Context) {
-		result, err := getSchema(c.Param("scope"), session)
+		result, err := GetSchema(c.Param("scope"), session)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "schema not found"})
 			return
@@ -37,7 +39,7 @@ func routeSchema(router gin.IRouter, dataSession *r.Session, session *r.Session)
 	})
 
 	router.POST("/:scope/schema", func(c *gin.Context) {
-		var schema schema
+		var schema Schema
 
 		if c.BindJSON(&schema) != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON data"})

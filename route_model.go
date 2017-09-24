@@ -7,21 +7,24 @@ import (
 	r "gopkg.in/gorethink/gorethink.v3"
 )
 
-type model struct {
+// Model is a database model for a specific scope.
+// ID is the scope and Factors is a list of scopes which ID depends on.
+type Model struct {
 	Factors []string `json:"factors" gorethink:"factors"`
 	ID      string   `json:"id" gorethink:"id"`
 }
 
-func getModel(scope string, session *r.Session) (model, error) {
+// GetModel retrieves the model for a given scope.
+func GetModel(scope string, session *r.Session) (Model, error) {
 	res, err := r.Table("model").Get(scope).Run(session)
 	if err != nil {
-		return model{}, err
+		return Model{}, err
 	}
 	defer res.Close()
 
-	var result model
+	var result Model
 	if err := res.One(&result); err != nil {
-		return model{}, err
+		return Model{}, err
 	}
 
 	return result, nil
@@ -30,7 +33,7 @@ func getModel(scope string, session *r.Session) (model, error) {
 func routeModel(router gin.IRouter, session *r.Session) {
 
 	router.GET("/:scope/model", func(c *gin.Context) {
-		model, err := getModel(c.Param("scope"), session)
+		model, err := GetModel(c.Param("scope"), session)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "model not found"})
 			return
@@ -46,14 +49,14 @@ func routeModel(router gin.IRouter, session *r.Session) {
 			return
 		}
 
-		newModel := model{Factors: factors, ID: c.Param("scope")}
+		model := Model{Factors: factors, ID: c.Param("scope")}
 
-		if _, err := r.Table("model").Insert(newModel, r.InsertOpts{Conflict: "replace"}).RunWrite(session); err != nil {
+		if _, err := r.Table("model").Insert(model, r.InsertOpts{Conflict: "replace"}).RunWrite(session); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
 			return
 		}
 
-		c.JSON(http.StatusOK, newModel)
+		c.JSON(http.StatusOK, model)
 
 	})
 }
