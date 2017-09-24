@@ -118,6 +118,8 @@ func route(IP string, databaseIP string) {
 	routeSchema(scope, dataSession, modelSession)
 	routeModel(scope, modelSession)
 
+	routeData(scope, dataSession, modelSession)
+
 	router.Run(IP)
 
 }
