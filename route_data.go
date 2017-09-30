@@ -39,11 +39,13 @@ func routeData(router gin.IRouter, dataSession *r.Session, modelSession *r.Sessi
 
 		model, err := GetModel(scope, modelSession)
 		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "model not registered"})
 			return
 		}
 
 		states, err := GetStates(scope, dataSession)
 		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error retrieving scope states"})
 			return
 		}
 
