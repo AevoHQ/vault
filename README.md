@@ -1,2 +1,2 @@
 # Aevo Vault
-Aevo data storage API.
+Data storage API.
