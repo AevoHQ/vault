@@ -34,6 +34,8 @@ func routeSchema(router gin.IRouter, dataSession *r.Session, session *r.Session)
 			return
 		}
 
+		delete(result, "id")
+
 		c.JSON(http.StatusOK, result)
 	})
 
