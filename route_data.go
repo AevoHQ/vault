@@ -30,6 +30,7 @@ func GetRecent(scope string, time time.Time, session *r.Session) (State, error) 
 type DataPoint struct {
 	Label   State            `json:"label"`
 	Factors map[string]State `json:"factors"`
+	Time    time.Time        `json:"time"`
 }
 
 func routeData(router gin.IRouter, dataSession *r.Session, modelSession *r.Session) {
@@ -51,7 +52,11 @@ func routeData(router gin.IRouter, dataSession *r.Session, modelSession *r.Sessi
 
 		dataSet := make([]DataPoint, len(states))
 		for index, state := range states {
-			dataSet[index] = DataPoint{Label: state, Factors: make(map[string]State)}
+			dataSet[index] = DataPoint{
+				Label:   state,
+				Factors: make(map[string]State),
+				Time:    state[primaryKey].(time.Time),
+			}
 		}
 
 		for _, dataPoint := range dataSet {
