@@ -39,25 +39,11 @@ func main() {
 			EnvVar: "AEVO_DATABASE_IP",
 		},
 		cli.StringFlag{
-			Name:        "db-data",
-			Value:       "data",
-			Usage:       "database for storing data",
-			Destination: &dbData,
-			EnvVar:      "AEVO_DB_DATA",
-		},
-		cli.StringFlag{
-			Name:        "db-model",
-			Value:       "model",
-			Usage:       "database for storing schemas and models",
-			Destination: &dbModel,
-			EnvVar:      "AEVO_DB_MODEL",
-		},
-		cli.StringFlag{
-			Name:        "data-primary-key",
-			Value:       "time",
-			Usage:       "primary data storage key",
-			Destination: &primaryKey,
-			EnvVar:      "AEVO_DATA_PRIMARY_KEY",
+			Name:        "db",
+			Value:       "aevo",
+			Usage:       "database name",
+			Destination: &dbName,
+			EnvVar:      "AEVO_DB",
 		},
 	}
 
@@ -92,33 +78,26 @@ func main() {
 
 }
 
-var dbModel, dbData = "model", "data"
+var dbName = "aevo"
 
 func route(IP string, databaseIP string) {
 
 	router := gin.Default()
 	scope := router.Group("/scope")
 
-	dataSession, err := r.Connect(r.ConnectOpts{
+	session, err := r.Connect(r.ConnectOpts{
 		Address:  databaseIP,
-		Database: dbData,
+		Database: dbName,
 	})
 	if err != nil {
 		log.Fatalln(err)
 	}
-	routeState(scope, dataSession)
+	routeState(scope, session)
 
-	modelSession, err := r.Connect(r.ConnectOpts{
-		Address:  databaseIP,
-		Database: dbModel,
-	})
-	if err != nil {
-		log.Fatalln(err)
-	}
-	routeSchema(scope, dataSession, modelSession)
-	routeModel(scope, modelSession)
+	routeSchema(scope, session)
+	routeModel(scope, session)
 
-	routeData(scope, dataSession, modelSession)
+	routeData(scope, session)
 
 	router.Run(IP)
 

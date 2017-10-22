@@ -26,7 +26,7 @@ func GetSchema(scope string, session *r.Session) (Schema, error) {
 	return result, nil
 }
 
-func routeSchema(router gin.IRouter, dataSession *r.Session, session *r.Session) {
+func routeSchema(router gin.IRouter, session *r.Session) {
 	router.GET("/:scope/schema", func(c *gin.Context) {
 		result, err := GetSchema(c.Param("scope"), session)
 		if err != nil {
@@ -90,17 +90,10 @@ func routeSchema(router gin.IRouter, dataSession *r.Session, session *r.Session)
 
 		schema["id"] = c.Param("scope")
 
-		res, err := r.Table("schema").Insert(schema, r.InsertOpts{Conflict: "replace"}).RunWrite(session)
+		_, err := r.Table("schema").Insert(schema, r.InsertOpts{Conflict: "replace"}).RunWrite(session)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "storage error"})
 			return
-		}
-
-		if res.Inserted != 0 {
-			if _, err := r.TableCreate(schema["id"], r.TableCreateOpts{PrimaryKey: "time"}).RunWrite(dataSession); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "duplicate schema"})
-				return
-			}
 		}
 
 		c.JSON(http.StatusOK, schema)

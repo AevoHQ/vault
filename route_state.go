@@ -8,7 +8,7 @@ import (
 	r "gopkg.in/gorethink/gorethink.v3"
 )
 
-var primaryKey = "time"
+const primaryKey = "time"
 
 // State is a single state of a scope.
 type State map[string]interface{}
@@ -19,6 +19,7 @@ type States []State
 // Statelike is an interface for types that may be interpreted and stored as states.
 type Statelike interface {
 	parseMapTime()
+	setScope(scope string)
 }
 
 func (state State) parseMapTime() {
@@ -36,6 +37,9 @@ func (state State) parseMapTime() {
 		state[primaryKey] = time.Now()
 	}
 }
+func (state State) setScope(scope string) {
+	state["scope"] = scope
+}
 
 func (states States) parseMapTime() {
 	for _, state := range states {
@@ -43,11 +47,16 @@ func (states States) parseMapTime() {
 	}
 }
 
+func (states States) setScope(scope string) {
+	for _, state := range states {
+		state.setScope(scope)
+	}
+}
+
 // GetStates retrieves all stored states for a given scope in chronological order.
 func GetStates(scope string, session *r.Session) (States, error) {
-	res, err := r.Table(scope).OrderBy(r.OrderByOpts{
-		Index: primaryKey,
-	}).Run(session)
+	res, err := r.Table("data").GetAllByIndex("scope", scope).
+		OrderBy(primaryKey).Run(session)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +89,8 @@ func routeState(router gin.IRouter, session *r.Session) {
 
 			data.parseMapTime()
 
-			_, err := r.Table(c.Param("scope")).Insert(data, r.InsertOpts{Conflict: "replace"}).RunWrite(session)
+			data.setScope(c.Param("scope"))
+			_, err := r.Table("data").Insert(data, r.InsertOpts{Conflict: "replace"}).RunWrite(session)
 			if err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": "scope not registered"})
 				return

@@ -10,7 +10,8 @@ import (
 
 // GetRecent retrieves the most recent scope entry before a specific time.
 func GetRecent(scope string, time time.Time, session *r.Session) (State, error) {
-	res, err := r.Table(scope).
+	res, err := r.Table("data").
+		GetAllByIndex("scope", scope).
 		Filter(r.Row.Field(primaryKey).Lt(time)).
 		Max(primaryKey).Run(session)
 	if err != nil {
@@ -33,18 +34,18 @@ type DataPoint struct {
 	Time    time.Time        `json:"time"`
 }
 
-func routeData(router gin.IRouter, dataSession *r.Session, modelSession *r.Session) {
+func routeData(router gin.IRouter, session *r.Session) {
 
 	router.GET("/:scope/data", func(c *gin.Context) {
 		scope := c.Param("scope")
 
-		model, err := GetModel(scope, modelSession)
+		model, err := GetModel(scope, session)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "model not registered"})
 			return
 		}
 
-		states, err := GetStates(scope, dataSession)
+		states, err := GetStates(scope, session)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error retrieving scope states"})
 			return
@@ -61,7 +62,7 @@ func routeData(router gin.IRouter, dataSession *r.Session, modelSession *r.Sessi
 
 		for _, dataPoint := range dataSet {
 			for _, factorScope := range model.Factors {
-				factorState, err := GetRecent(factorScope, dataPoint.Label[primaryKey].(time.Time), dataSession)
+				factorState, err := GetRecent(factorScope, dataPoint.Label[primaryKey].(time.Time), session)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "error retrieving truncated factor data"})
 					return

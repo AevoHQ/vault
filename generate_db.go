@@ -15,17 +15,12 @@ func generate(databaseIP string) {
 		return
 	}
 
-	if _, err := r.DBCreate(dbModel).RunWrite(session); err != nil {
-		log.Fatalln("Unable to create model database: ", err)
+	if _, err := r.DBCreate(dbName).RunWrite(session); err != nil {
+		log.Fatalln("Unable to create database: ", err)
 		return
 	}
 
-	if _, err := r.DBCreate(dbData).RunWrite(session); err != nil {
-		log.Fatalln("Unable to create data database: ", err)
-		return
-	}
-
-	session.Use(dbModel)
+	session.Use(dbName)
 
 	if _, err := r.TableCreate("schema").RunWrite(session); err != nil {
 		log.Fatalln("Unable to create schema table: ", err)
@@ -36,4 +31,18 @@ func generate(databaseIP string) {
 		log.Fatalln("Unable to create model table: ", err)
 		return
 	}
+
+	if _, err := r.TableCreate("data").RunWrite(session); err != nil {
+		log.Fatalln("Unable to create data table: ", err)
+		return
+	}
+	if _, err := r.Table("data").IndexCreate("scope").RunWrite(session); err != nil {
+		log.Fatalln("Unable to create `scope` secondary index on data table: ", err)
+		return
+	}
+	if _, err := r.Table("data").IndexCreate("time").RunWrite(session); err != nil {
+		log.Fatalln("Unable to create `time` secondary index on data table: ", err)
+		return
+	}
+
 }
